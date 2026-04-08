@@ -9,7 +9,7 @@ async function main() {
   const code = await ethers.provider.getCode(TOKEN_ADDRESS);
   if (code === "0x") {
     throw new Error(
-      `No contract found at TOKEN_ADDRESS: ${TOKEN_ADDRESS}. Please use deployed MTS address.`
+      `No contract found at TOKEN_ADDRESS: ${TOKEN_ADDRESS}. Please use deployed MTS address.`,
     );
   }
 

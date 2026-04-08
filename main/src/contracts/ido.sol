@@ -6,11 +6,11 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
 contract MTSPresale is Ownable, ReentrancyGuard {
-    IERC20 public mtsToken;     
-    IERC20 public payToken;      
-    uint256 public constant PRICE = 0.02 * 10**18; // 0.02 egas 
-    uint256 public constant MAX_SALE_AMOUNT = 500000 * 10**18; // 0.5M
-    uint256 public totalSold;   
+    IERC20 public mtsToken;
+    IERC20 public payToken;
+    uint256 public constant PRICE = 0.02 * 10 ** 18; // 0.02 egas
+    uint256 public constant MAX_SALE_AMOUNT = 500000 * 10 ** 18; // 0.5M
+    uint256 public totalSold;
 
     event TokensPurchased(address indexed buyer, uint256 amount, uint256 cost);
 
@@ -27,7 +27,7 @@ contract MTSPresale is Ownable, ReentrancyGuard {
     function isNativePayment() public view returns (bool) {
         return address(payToken) == address(0);
     }
-  
+
     function buyTokens(uint256 _mtsAmount) external payable nonReentrant {
         require(_mtsAmount > 0, "Amount must be > 0");
         require(totalSold + _mtsAmount <= MAX_SALE_AMOUNT, "Exceeds IDO limit");

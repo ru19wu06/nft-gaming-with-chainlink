@@ -1,6 +1,9 @@
 const { expect } = require("chai");
 const { ethers } = require("hardhat");
-const { loadFixture, time } = require("@nomicfoundation/hardhat-network-helpers");
+const {
+  loadFixture,
+  time,
+} = require("@nomicfoundation/hardhat-network-helpers");
 const { anyValue } = require("@nomicfoundation/hardhat-chai-matchers/withArgs");
 
 describe("MonsterGame", function () {
@@ -10,7 +13,9 @@ describe("MonsterGame", function () {
     const mts = await ethers.deployContract("MTS");
     await mts.waitForDeployment();
 
-    const game = await ethers.deployContract("MonsterGame", [await mts.getAddress()]);
+    const game = await ethers.deployContract("MonsterGame", [
+      await mts.getAddress(),
+    ]);
     await game.waitForDeployment();
 
     const minterRole = await mts.MINTER_ROLE();
@@ -30,7 +35,9 @@ describe("MonsterGame", function () {
     const mts = await ethers.deployContract("MTS");
     await mts.waitForDeployment();
 
-    const game = await ethers.deployContract("MonsterGame", [await mts.getAddress()]);
+    const game = await ethers.deployContract("MonsterGame", [
+      await mts.getAddress(),
+    ]);
     await game.waitForDeployment();
 
     const unit = 10n ** BigInt(await mts.decimals());
@@ -79,7 +86,9 @@ describe("MonsterGame", function () {
     await game.connect(player1).mintMutiEgg(num);
 
     expect(await game.discountEggValue()).to.equal(stockBefore - num);
-    expect(await mts.balanceOf(player1.address)).to.equal(balanceBefore - expectedCost);
+    expect(await mts.balanceOf(player1.address)).to.equal(
+      balanceBefore - expectedCost,
+    );
     expect(await game.balanceOf(player1.address)).to.equal(num);
 
     const mon0 = await game.monsters(0n);
@@ -91,10 +100,12 @@ describe("MonsterGame", function () {
   it("reverts mintMutiEgg when purchase exceeds stock", async function () {
     const { player1, mts, game, unit } = await loadFixture(deployGameFixture);
     const num = 101n;
-    await mts.connect(player1).approve(await game.getAddress(), num * 220n * unit);
+    await mts
+      .connect(player1)
+      .approve(await game.getAddress(), num * 220n * unit);
 
     await expect(game.connect(player1).mintMutiEgg(num)).to.be.revertedWith(
-      "Purchase exceeds stock"
+      "Purchase exceeds stock",
     );
   });
 
@@ -131,10 +142,13 @@ describe("MonsterGame", function () {
   });
 
   it("reverts battle when caller is not the owner", async function () {
-    const { player1, other, mts, game, unit } = await loadFixture(deployGameFixture);
+    const { player1, other, mts, game, unit } =
+      await loadFixture(deployGameFixture);
     await mintEggFor(game, mts, player1, unit);
 
-    await expect(game.connect(other).battle(0n, 1n)).to.be.revertedWith("Not owner");
+    await expect(game.connect(other).battle(0n, 1n)).to.be.revertedWith(
+      "Not owner",
+    );
   });
 
   it("enforces 3 battles per day and resets next day", async function () {
@@ -146,7 +160,7 @@ describe("MonsterGame", function () {
     await game.connect(player1).battle(0n, 1n);
 
     await expect(game.connect(player1).battle(0n, 1n)).to.be.revertedWith(
-      "Daily limit reached (3/3). Come back tomorrow!"
+      "Daily limit reached (3/3). Come back tomorrow!",
     );
 
     expect(await game.getRemainingBattles(0n)).to.equal(0n);
@@ -190,7 +204,9 @@ describe("MonsterGame", function () {
     expect(await game.canCheckIn(player1.address)).to.equal(false);
     expect(await mts.balanceOf(player1.address)).to.equal(before + reward);
 
-    await expect(game.connect(player1).checkIn()).to.be.revertedWith("Already checked in today!");
+    await expect(game.connect(player1).checkIn()).to.be.revertedWith(
+      "Already checked in today!",
+    );
 
     await time.increase(24 * 60 * 60 + 1);
     expect(await game.canCheckIn(player1.address)).to.equal(true);
@@ -200,15 +216,22 @@ describe("MonsterGame", function () {
   });
 
   it("reverts battle/checkIn when game does not have MINTER_ROLE", async function () {
-    const { player, mts, game, unit } = await loadFixture(deployWithoutMinterRoleFixture);
+    const { player, mts, game, unit } = await loadFixture(
+      deployWithoutMinterRoleFixture,
+    );
     await mintEggFor(game, mts, player, unit);
 
-    await expect(game.connect(player).battle(0n, 1n)).to.be.revertedWith("Game missing MINTER_ROLE");
-    await expect(game.connect(player).checkIn()).to.be.revertedWith("Game missing MINTER_ROLE");
+    await expect(game.connect(player).battle(0n, 1n)).to.be.revertedWith(
+      "Game missing MINTER_ROLE",
+    );
+    await expect(game.connect(player).checkIn()).to.be.revertedWith(
+      "Game missing MINTER_ROLE",
+    );
   });
 
   it("returns leaderboard pages and empty result for out-of-range offset", async function () {
-    const { player1, player2, mts, game, unit } = await loadFixture(deployGameFixture);
+    const { player1, player2, mts, game, unit } =
+      await loadFixture(deployGameFixture);
 
     await mintEggFor(game, mts, player1, unit);
     await mintEggFor(game, mts, player2, unit);

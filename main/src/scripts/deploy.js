@@ -17,7 +17,7 @@ async function main() {
 
   const existingMtsAddress = normalizeAddress(
     process.env.MTS_ADDRESS,
-    "MTS_ADDRESS"
+    "MTS_ADDRESS",
   );
   const existingPayTokenAddress =
     normalizeAddress(process.env.PAY_TOKEN_ADDRESS, "PAY_TOKEN_ADDRESS") ??
@@ -56,7 +56,7 @@ async function main() {
           "Ensure deployer has DEFAULT_ADMIN_ROLE on MTS. " +
           `Original error: ${
             error instanceof Error ? error.message : String(error)
-          }`
+          }`,
       );
     }
   }
@@ -70,7 +70,7 @@ async function main() {
   const payTokenAddress = existingPayTokenAddress ?? hardhat.ethers.ZeroAddress;
   if (!existingPayTokenAddress) {
     console.log(
-      `PAY_TOKEN_ADDRESS not provided, defaulting payToken to native coin mode (EGAS): ${payTokenAddress}`
+      `PAY_TOKEN_ADDRESS not provided, defaulting payToken to native coin mode (EGAS): ${payTokenAddress}`,
     );
   } else {
     console.log(`Using PAY token: ${payTokenAddress}`);
@@ -87,7 +87,7 @@ async function main() {
   const [deployer] = await hardhat.ethers.getSigners();
   if (!deployer) {
     throw new Error(
-      "No deployer signer available. Check PRIVATE_KEY/accounts config for the selected network."
+      "No deployer signer available. Check PRIVATE_KEY/accounts config for the selected network.",
     );
   }
   const deployerAddress = await deployer.getAddress();
@@ -103,8 +103,8 @@ async function main() {
       console.log(
         `Minted ${hardhat.ethers.formatUnits(
           shortfall,
-          18
-        )} MTS to deployer for IDO allocation`
+          18,
+        )} MTS to deployer for IDO allocation`,
       );
     }
   }
@@ -113,8 +113,8 @@ async function main() {
     throw new Error(
       `Insufficient deployer MTS balance for IDO allocation. Need ${hardhat.ethers.formatUnits(
         IDO_ALLOCATION,
-        18
-      )} MTS, have ${hardhat.ethers.formatUnits(deployerBalance, 18)} MTS.`
+        18,
+      )} MTS, have ${hardhat.ethers.formatUnits(deployerBalance, 18)} MTS.`,
     );
   }
 
@@ -124,8 +124,8 @@ async function main() {
   console.log(
     `Funded MTSPresale with ${hardhat.ethers.formatUnits(
       IDO_ALLOCATION,
-      18
-    )} MTS (balance: ${hardhat.ethers.formatUnits(presaleMtsBalance, 18)})`
+      18,
+    )} MTS (balance: ${hardhat.ethers.formatUnits(presaleMtsBalance, 18)})`,
   );
 
   console.log(`NEXT_PUBLIC_MTS_ADDRESS=${tokenAddress}`);
