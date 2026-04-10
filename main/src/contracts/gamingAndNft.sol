@@ -75,7 +75,7 @@ contract MonsterGame is ERC721, VRFConsumerBaseV2Plus, ReentrancyGuard {
 
 	function mintEgg() external nonReentrant {
 		uint256 cost = 300 * 10 ** mtsToken.decimals();
-		mtsToken.burnFrom(msg.sender, cost);
+		//mtsToken.burnFrom(msg.sender, cost);
 		holdingEggs[msg.sender].holding += 1;
 		holdingEggs[msg.sender].blockTime = block.number;
 	}
@@ -85,7 +85,7 @@ contract MonsterGame is ERC721, VRFConsumerBaseV2Plus, ReentrancyGuard {
 		require(discountEggValue >= num, "Purchase exceeds stock");
 		discountEggValue = discountEggValue - num;
 		uint256 cost = num * discountPrice * 10 ** mtsToken.decimals();
-		mtsToken.burnFrom(msg.sender, cost);
+		//mtsToken.burnFrom(msg.sender, cost);
 		holdingEggs[msg.sender].holding += num;
 		holdingEggs[msg.sender].blockTime = block.number;
 	}
