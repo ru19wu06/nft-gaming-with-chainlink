@@ -3,6 +3,11 @@
     "allow": [
       "Bash(npx hardhat:*)",
       "Bash(npm install:*)"
+    ],
+    "deny": [
+      "Read(.env)",
+      "Read(.env.*)",
+      "Bash(git *)"
     ]
   }
 }
