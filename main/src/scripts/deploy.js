@@ -1,140 +1,137 @@
 import hardhat from "hardhat";
 
-const IDO_ALLOCATION = hardhat.ethers.parseUnits("500000", 18);
+const { ethers, network } = hardhat;
 
-const normalizeAddress = (value, envName) => {
-  if (!value) return undefined;
-  const trimmed = value.trim();
-  if (!trimmed) return undefined;
-  if (!hardhat.ethers.isAddress(trimmed)) {
-    throw new Error(`Invalid ${envName}: ${trimmed}`);
-  }
-  return hardhat.ethers.getAddress(trimmed);
-};
+const IDO_ALLOCATION = ethers.parseUnits("500000", 18);
+
+// Polygon Amoy mainnet VRF config
+const POLYGON_VRF_COORDINATOR = "0xec0Ed46f36576541C75739E915ADbCb3DE24bD77";
+const POLYGON_KEY_HASH = "0x0ffbbd0c1c18c0263dd778dadd1d64240d7bc338d95fec1cf0473928ca7eaf9e";
+const POLYGON_SUB_ID = 33052362848653601144628215280478780936142151661209813952189268371226136887118n;
+
+async function setupLocalVRF() {
+	console.log("  Deploying VRFCoordinatorV2_5Mock for local network...");
+	const vrfMock = await ethers.deployContract("VRFCoordinatorV2_5Mock", [
+	  0n, // baseFee = 0 (free for local testing)
+		0n, // gasPrice = 0
+		ethers.parseEther("0.003"),
+	]);
+	await vrfMock.waitForDeployment();
+	const vrfAddress = await vrfMock.getAddress();
+	console.log(`  VRFCoordinatorV2_5Mock: ${vrfAddress}`);
+
+	const createTx = await vrfMock.createSubscription();
+	const receipt = await createTx.wait();
+
+	let subId = 0n;
+	for (const log of receipt.logs) {
+		try {
+			const parsed = vrfMock.interface.parseLog({
+				topics: log.topics,
+				data: log.data,
+			});
+			if (parsed && parsed.name === "SubscriptionCreated") {
+				subId = parsed.args.subId;
+				break;
+			}
+		} catch {}
+	}
+
+	await vrfMock.fundSubscription(subId, ethers.parseEther("100"));
+	console.log(`  Subscription ID: ${subId}`);
+
+	return { vrfAddress, subId, keyHash: ethers.ZeroHash, vrfMock };
+}
 
 async function main() {
-  console.log("Deploy...");
+	console.log(`\nNetwork: ${network.name}`);
+	const isLocal = network.name === "localhost" || network.name === "hardhat";
 
-  const existingMtsAddress = normalizeAddress(
-    process.env.MTS_ADDRESS,
-    "MTS_ADDRESS",
-  );
-  const existingPayTokenAddress =
-    normalizeAddress(process.env.PAY_TOKEN_ADDRESS, "PAY_TOKEN_ADDRESS") ??
-    normalizeAddress(process.env.USDT_ADDRESS, "USDT_ADDRESS");
+	// ── 1. Deploy or attach MTS ────────────────────────────────────────────────
+	let mtsToken, tokenAddress;
+	const existingMts = process.env.MTS_ADDRESS?.trim();
 
-  let mtsToken;
-  let tokenAddress;
+	if (existingMts && ethers.isAddress(existingMts)) {
+		tokenAddress = ethers.getAddress(existingMts);
+		mtsToken = await ethers.getContractAt("MTS", tokenAddress);
+		console.log(`Using existing MTS: ${tokenAddress}`);
+	} else {
+		mtsToken = await ethers.deployContract("MTS");
+		await mtsToken.waitForDeployment();
+		tokenAddress = await mtsToken.getAddress();
+		console.log(`Deployed MTS: ${tokenAddress}`);
+	}
 
-  if (existingMtsAddress) {
-    tokenAddress = existingMtsAddress;
-    mtsToken = await hardhat.ethers.getContractAt("MTS", tokenAddress);
-    console.log(`Using existing MTS Token: ${tokenAddress}`);
-  } else {
-    mtsToken = await hardhat.ethers.deployContract("MTS");
-    await mtsToken.waitForDeployment();
-    tokenAddress = await mtsToken.getAddress();
-    console.log(`Deployed MTS Token: ${tokenAddress}`);
-  }
+	// ── 2. VRF setup ──────────────────────────────────────────────────────────
+	let vrfAddress, subId, keyHash, vrfMock;
 
-  const monsterGame = await hardhat.ethers.deployContract("MonsterGame", [
-    tokenAddress,
-  ]);
-  await monsterGame.waitForDeployment();
-  const gameAddress = await monsterGame.getAddress();
-  console.log(`Deployed MonsterGame: ${gameAddress}`);
+	if (isLocal) {
+		({ vrfAddress, subId, keyHash, vrfMock } = await setupLocalVRF());
+	} else {
+	  vrfAddress = process.env.VRF_COORDINATOR ?? POLYGON_VRF_COORDINATOR;
+		subId = process.env.VRF_SUB_ID ? BigInt(process.env.VRF_SUB_ID) : POLYGON_SUB_ID;
+		keyHash = process.env.VRF_KEY_HASH ?? POLYGON_KEY_HASH;
+		console.log(`Using VRF Coordinator: ${vrfAddress}`);
+		console.log(`Sub ID: ${subId}`);
+	}
 
-  const MINTER_ROLE = await mtsToken.MINTER_ROLE();
-  const hasMinterRole = await mtsToken.hasRole(MINTER_ROLE, gameAddress);
-  if (!hasMinterRole) {
-    try {
-      const tx = await mtsToken.grantRole(MINTER_ROLE, gameAddress);
-      await tx.wait();
-    } catch (error) {
-      throw new Error(
-        `Failed to grant MINTER_ROLE to MonsterGame (${gameAddress}) on MTS (${tokenAddress}). ` +
-          "Ensure deployer has DEFAULT_ADMIN_ROLE on MTS. " +
-          `Original error: ${
-            error instanceof Error ? error.message : String(error)
-          }`,
-      );
-    }
-  }
+	// ── 3. Deploy MonsterGame ─────────────────────────────────────────────────
+	const monsterGame = await ethers.deployContract("MonsterGame", [tokenAddress, vrfAddress, subId, keyHash]);
+	await monsterGame.waitForDeployment();
+	const gameAddress = await monsterGame.getAddress();
+	console.log(`Deployed MonsterGame: ${gameAddress}`);
 
-  const isConfigured = await mtsToken.hasRole(MINTER_ROLE, gameAddress);
-  if (!isConfigured) {
-    throw new Error("MonsterGame MINTER_ROLE configuration failed");
-  }
-  console.log("MonsterGame MINTER_ROLE configured: true");
+	// ── 4. Register MonsterGame as VRF consumer ───────────────────────────────
+	if (isLocal && vrfMock) {
+		await (await vrfMock.addConsumer(subId, gameAddress)).wait();
+		console.log(`MonsterGame added as VRF consumer`);
+	} else {
+		console.log(`ACTION REQUIRED: Add ${gameAddress} as consumer on Chainlink dashboard (sub ${subId})`);
+	}
 
-  const payTokenAddress = existingPayTokenAddress ?? hardhat.ethers.ZeroAddress;
-  if (!existingPayTokenAddress) {
-    console.log(
-      `PAY_TOKEN_ADDRESS not provided, defaulting payToken to native coin mode (EGAS): ${payTokenAddress}`,
-    );
-  } else {
-    console.log(`Using PAY token: ${payTokenAddress}`);
-  }
+	// ── 5. Grant MINTER_ROLE to MonsterGame ───────────────────────────────────
+	const MINTER_ROLE = await mtsToken.MINTER_ROLE();
+	if (!(await mtsToken.hasRole(MINTER_ROLE, gameAddress))) {
+		await (await mtsToken.grantRole(MINTER_ROLE, gameAddress)).wait();
+	}
+	console.log(`MonsterGame MINTER_ROLE: granted`);
 
-  const mtsPresale = await hardhat.ethers.deployContract("MTSPresale", [
-    tokenAddress,
-    payTokenAddress,
-  ]);
-  await mtsPresale.waitForDeployment();
-  const presaleAddress = await mtsPresale.getAddress();
-  console.log(`Deployed MTSPresale: ${presaleAddress}`);
+	// ── 6. Deploy MTSPresale ──────────────────────────────────────────────────
+	const payTokenAddress = process.env.PAY_TOKEN_ADDRESS?.trim() || ethers.ZeroAddress;
 
-  const [deployer] = await hardhat.ethers.getSigners();
-  if (!deployer) {
-    throw new Error(
-      "No deployer signer available. Check PRIVATE_KEY/accounts config for the selected network.",
-    );
-  }
-  const deployerAddress = await deployer.getAddress();
-  let deployerBalance = await mtsToken.balanceOf(deployerAddress);
+	const mtsPresale = await ethers.deployContract("MTSPresale", [tokenAddress, payTokenAddress]);
+	await mtsPresale.waitForDeployment();
+	const presaleAddress = await mtsPresale.getAddress();
+	console.log(`Deployed MTSPresale: ${presaleAddress}`);
 
-  if (deployerBalance < IDO_ALLOCATION) {
-    const shortfall = IDO_ALLOCATION - deployerBalance;
-    const canMint = await mtsToken.hasRole(MINTER_ROLE, deployerAddress);
-    if (canMint) {
-      const mintTx = await mtsToken.mint(deployerAddress, shortfall);
-      await mintTx.wait();
-      deployerBalance = await mtsToken.balanceOf(deployerAddress);
-      console.log(
-        `Minted ${hardhat.ethers.formatUnits(
-          shortfall,
-          18,
-        )} MTS to deployer for IDO allocation`,
-      );
-    }
-  }
+	// ── 7. Fund MTSPresale with IDO allocation ────────────────────────────────
+	const [deployer] = await ethers.getSigners();
+	let deployerBalance = await mtsToken.balanceOf(deployer.address);
 
-  if (deployerBalance < IDO_ALLOCATION) {
-    throw new Error(
-      `Insufficient deployer MTS balance for IDO allocation. Need ${hardhat.ethers.formatUnits(
-        IDO_ALLOCATION,
-        18,
-      )} MTS, have ${hardhat.ethers.formatUnits(deployerBalance, 18)} MTS.`,
-    );
-  }
+	if (deployerBalance < IDO_ALLOCATION) {
+		const shortfall = IDO_ALLOCATION - deployerBalance;
+		const canMint = await mtsToken.hasRole(MINTER_ROLE, deployer.address);
+		if (canMint) {
+			await (await mtsToken.mint(deployer.address, shortfall)).wait();
+		}
+	}
 
-  const transferTx = await mtsToken.transfer(presaleAddress, IDO_ALLOCATION);
-  await transferTx.wait();
-  const presaleMtsBalance = await mtsToken.balanceOf(presaleAddress);
-  console.log(
-    `Funded MTSPresale with ${hardhat.ethers.formatUnits(
-      IDO_ALLOCATION,
-      18,
-    )} MTS (balance: ${hardhat.ethers.formatUnits(presaleMtsBalance, 18)})`,
-  );
+	await (await mtsToken.transfer(presaleAddress, IDO_ALLOCATION)).wait();
+	console.log(`MTSPresale funded with 500,000 MTS`);
 
-  console.log(`NEXT_PUBLIC_MTS_ADDRESS=${tokenAddress}`);
-  console.log(`NEXT_PUBLIC_MONSTER_GAME_ADDRESS=${gameAddress}`);
-  console.log(`NEXT_PUBLIC_PAY_TOKEN_ADDRESS=${payTokenAddress}`);
-  console.log(`NEXT_PUBLIC_MTS_PRESALE_ADDRESS=${presaleAddress}`);
+	// ── 8. Print addresses ────────────────────────────────────────────────────
+	console.log("\n── Contract Addresses ──────────────────────────────");
+	console.log(`NEXT_PUBLIC_MTS_ADDRESS=${tokenAddress}`);
+	console.log(`NEXT_PUBLIC_MONSTER_GAME_ADDRESS=${gameAddress}`);
+	console.log(`NEXT_PUBLIC_PAY_TOKEN_ADDRESS=${payTokenAddress}`);
+	console.log(`NEXT_PUBLIC_MTS_PRESALE_ADDRESS=${presaleAddress}`);
+	if (isLocal) {
+		console.log(`VRF_MOCK_ADDRESS=${vrfAddress}`);
+		console.log(`VRF_SUB_ID=${subId}`);
+	}
 }
 
 main().catch((error) => {
-  console.error(error);
-  process.exitCode = 1;
+	console.error(error);
+	process.exitCode = 1;
 });
