@@ -150,13 +150,6 @@ npx hardhat run scripts/chainlink/deployChainlink.js --network polygon
 > **Before deploying the lottery**, register a VRF subscription at [vrf.chain.link](https://vrf.chain.link), fund it with LINK, and update `subscriptionId` in `chinlink.sol`.
 
 
-## Post-Deployment Checklist
-
-| Step | Done by |
-|------|---------|
-| Grant `MINTER_ROLE` to MonsterGame on MTS | `deploy.js` automatically |
-| Fund MTSPresale with 500,000 MTS | `deploy.js` automatically |
-| Add LotteryV2_5 as VRF consumer | Manually on vrf.chain.link |
 
 ---
 
